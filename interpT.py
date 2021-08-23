@@ -16,23 +16,23 @@ import os
 import sys
 import numpy as np
 from scipy import interpolate
+import matplotlib.pyplot as plt
+import requests
+import urllib.request
 
-#import matplotlib.pyplot as plt
 
 #%%
 def main():
-    decimals = 8 # for rounding
+    decimals = 15 # for rounding
     
-    framerate = 24.0
+    framerate = 60
     
+    idlist = []
+
     keyscenes = []
-    #                [scene_fname, time_stamp]
-    keyscenes.append(['Skyrim0.json', -0.5]) # all time stamps pre 0.0 ignored post interp/convolution
-    keyscenes.append(['Skyrim1.json', 0.0]) # used as template for saving
-    keyscenes.append(['Skyrim2.json', 1.0])
-    keyscenes.append(['Skyrim3.json', 2.0])
-    keyscenes.append(['Skyrim4.json', 3.0]) # all time stamps post 3.0 ignored post interp/convolution
-    #keyscenes.append(['Skyrim5.json', 3.5]) 
+#              [scene_fname, time_stamp]
+    keyscenes.append(['interp_1.json', 0.0]) # all time stamps pre 0.0 ignored post interp/convolution
+    keyscenes.append(['interp_2.json', 20.0]) # used as template for saving
     
     json_interp = json_interpT(framerate, decimals)
     setup_return = json_interp.keyscene_setup(keyscenes)
@@ -52,9 +52,14 @@ def main():
         fov2 = 100 # ASK
         dof2 = 200.0 # ASK
         focal2 = 1.0 # ASK
+        lightsun2 = 1.0
+        animation2 = 0.0
+        cloudx = 0.0
+        cloudy = 128.0
+        cloudz = 0.0
         
         #pass point 2 / B
-        json_interp.point2_setup(t2, x2, y2, z2, roll2, pitch2, yaw2, fov2, dof2, focal2)
+        json_interp.point2_setup(t2, x2, y2, z2, roll2, pitch2, yaw2, fov2, dof2, focal2, lightsun2, animation2, cloudx, cloudy, cloudz)
         
         # run linear interp
         json_interp.do_interpT('slinear')
@@ -65,7 +70,7 @@ def main():
         
     elif setup_return == 3 or setup_return == 4:
         # smoothing == 1 (off) OR smoothing > 1 (on/strength)
-        json_interp.do_interpT('slinear',2) #ie ('slinear',5)
+        json_interp.do_interpT('slinear',5) #ie ('slinear',5)
         
     else:
         """ASK if they want to use:
@@ -90,9 +95,14 @@ class json_interpT():
         self.camX = []
         self.camY = []
         self.camZ = []
+        self.cloudX = []
+        self.cloudY = []
+        self.cloudZ = []
         self.camRoll = []
         self.camPitch = []
         self.camYaw = []
+        self.lightsun = []
+        self.animation = []
 
         self.camFoV = []
         self.camDoF = []
@@ -108,11 +118,11 @@ class json_interpT():
     
     #%%    
     def jsonload(self, fname):
-        return json.load(open(os.path.join('Source', fname),"r"))
+        return json.load(open(os.path.join(fname),"r"))
 
     def jsonsave(self, scene, fname):
-        json.dump(scene, open(os.path.join('Output', fname),"w"), indent=2)
-        #print(fname)
+        json.dump(scene, open(os.path.join(fname),"w"), indent=2)
+        print(fname)
         return
 
     def interpT(self, t, tframe, x, kindtype): # use t,x,and kindtype to create function. use tfrmae with function.
@@ -157,7 +167,7 @@ class json_interpT():
         return
     
     #%%
-    def point2_setup(self, t2, x2, y2, z2, roll2, pitch2, yaw2, fov2, dof2, focal2):    
+    def point2_setup(self, t2, x2, y2, z2, roll2, pitch2, yaw2, fov2, dof2, focal2, lightsun2, animation2):    
         # use source_scenes[0] as template
         self.source_scenes.append(self.source_scenes[0])
         # Ask users for point2 details...
@@ -168,7 +178,12 @@ class json_interpT():
         self.source_scenes[1]['camera']['orientation']['roll'] = roll2 # ASK
         self.source_scenes[1]['camera']['orientation']['pitch'] = pitch2 # ASK
         self.source_scenes[1]['camera']['orientation']['yaw'] = yaw2 # ASK
+        self.source_scenes[1]['sky']['cloudOffset']['x'] = x3 # ASK
+        self.source_scenes[1]['sky']['cloudOffset']['y'] = y3 # ASK
+        self.source_scenes[1]['sky']['cloudOffset']['z'] = z3 # ASK
         
+        self.source_scenes[1]['sun']['azimuth'] = lightsun2
+        self.source_scenes[1]['animationTime'] = animation2
         self.source_scenes[1]['camera']['fov'] = fov2 # ASK
         self.source_scenes[1]['camera']['dof'] = dof2 # ASK
         self.source_scenes[1]['camera']['focalOffset'] = focal2 # ASK
@@ -183,7 +198,12 @@ class json_interpT():
             self.camRoll.append(scene['camera']['orientation']['roll'])
             self.camPitch.append(scene['camera']['orientation']['pitch'])
             self.camYaw.append(scene['camera']['orientation']['yaw'])
-            
+            self.lightsun.append(scene['sun']['azimuth'])
+            self.animation.append(scene['animationTime'])
+            self.cloudX.append(scene['sky']['cloudOffset']['x'])
+            self.cloudY.append(scene['sky']['cloudOffset']['y'])
+            self.cloudZ.append(scene['sky']['cloudOffset']['z'])
+
             self.camFoV.append(scene['camera']['fov'])
             self.camDoF.append(scene['camera']['dof'])
             self.camDoF = [999999 if x=='Infinity' else x for x in self.camDoF] # Might need to use a higher value.
@@ -200,6 +220,11 @@ class json_interpT():
         self.new_camRoll = self.interpT(self.source_times, self.tframe, self.camRoll, interp_mode)
         self.new_camPitch = self.interpT(self.source_times, self.tframe, self.camPitch, interp_mode)
         self.new_camYaw = self.interpT(self.source_times, self.tframe, self.camYaw, interp_mode)
+        self.new_lightsun = self.interpT(self.source_times, self.tframe, self.lightsun, interp_mode)
+        self.new_animation = self.interpT(self.source_times, self.tframe, self.animation, interp_mode)
+        self.new_cloudX = self.interpT(self.source_times, self.tframe, self.cloudX, interp_mode)
+        self.new_cloudY = self.interpT(self.source_times, self.tframe, self.cloudY, interp_mode)
+        self.new_cloudZ = self.interpT(self.source_times, self.tframe, self.cloudZ, interp_mode)
         
         self.new_camFoV = self.interpT(self.source_times, self.tframe, self.camFoV, interp_mode) # might go negative
         self.new_camDoF = self.interpT(self.source_times, self.tframe, self.camDoF, interp_mode) # might go negative
@@ -222,6 +247,11 @@ class json_interpT():
         self.new_camRoll = self.smooth(self.new_camRoll,smoothing_var)
         self.new_camPitch = self.smooth(self.new_camPitch,smoothing_var)
         self.new_camYaw = self.smooth(self.new_camYaw,smoothing_var)
+        self.new_lightsun = self.smooth(self.new_lightsun,smoothing_var)
+        self.new_animation = self.smooth(self.new_animation,smoothing_var)
+        self.new_cloudX = self.smooth(self.new_cloudX,smoothing_var)
+        self.new_cloudY = self.smooth(self.new_cloudY,smoothing_var)
+        self.new_cloudZ = self.smooth(self.new_cloudZ,smoothing_var)
         
         self.new_camFoV = self.smooth(self.new_camFoV,smoothing_var)
         self.new_camDoF = self.smooth(self.new_camDoF,smoothing_var)
@@ -236,6 +266,11 @@ class json_interpT():
         self.new_camRoll = np.round(self.new_camRoll,decimals)
         self.new_camPitch = np.round(self.new_camPitch,decimals)
         self.new_camYaw = np.round(self.new_camYaw,decimals)
+        self.new_lightsun = np.round(self.new_lightsun,decimals)
+        self.new_animation = np.round(self.new_animation,decimals)
+        self.new_cloudX = np.round(self.new_cloudX,decimals)
+        self.new_cloudY = np.round(self.new_cloudY,decimals)
+        self.new_cloudZ = np.round(self.new_cloudZ,decimals)
         
         self.new_camFoV = np.round(self.new_camFoV,decimals)
         self.new_camDoF = np.round(self.new_camDoF,decimals)
@@ -252,26 +287,90 @@ class json_interpT():
         self.new_camRoll = [self.new_camRoll[i] for i in trim_idx]
         self.new_camPitch = [self.new_camPitch[i] for i in trim_idx]
         self.new_camYaw = [self.new_camYaw[i] for i in trim_idx]
-        
+
+
+        self.new_cloudX = [self.new_cloudX[i] for i in trim_idx]
+        self.new_cloudY = [self.new_cloudY[i] for i in trim_idx]
+        self.new_cloudZ = [self.new_cloudZ[i] for i in trim_idx]
+
+        #misc
+        self.new_lightsun = [self.new_lightsun[i] for i in trim_idx]
+        self.new_animation = [self.new_animation[i] for i in trim_idx]        
         self.new_camFoV = [self.new_camFoV[i] for i in trim_idx]
         self.new_camDoF = [self.new_camDoF[i] for i in trim_idx]
         self.new_camfocalOffset = [self.new_camfocalOffset[i] for i in trim_idx]
-    
+
+    def chunkycloudhandler(self):
+        #somehow write the idlist to a json file
+        for i in range(len(self.nframe)):
+            self.submit_json(fname, octree, emittergrid, samples)
+            
+        self.get_json_image(idlist[fname], samples, '/snapshot/' + fname + '.png')
+        list_to_json = json.dumps(idlist)
+
+        print(list_to_json)
+
+
+    def submit_json(self, interpnum, octreenum, emittergridnum, samples1):
+        url = "https://api.chunkycloud.lemaik.de/jobs"
+        payload={'X-Api-Key': 'APIKEY1',
+        'chunkyVersion': '2.x',
+        'transient': 'true',
+        'targetSpp': samples1}
+        files=[
+            ('scene',(interpnum,open('E:/Program Files/.chunky/ChunkyAnimationAutomation/' + interpnum,'rb'),'application/json')),
+            ('octree',(octreenum + '.octree2',open('E:/Program Files/.chunky/ChunkyAnimationAutomation/' + octreenum + '.octree2','rb'),'application/octet-stream')),
+            ('emittergrid',(emittergridnum + '.emittergrid',open('E:/Program Files/.chunky/ChunkyAnimationAutomation/' + emittergridnum + '.emittergrid','rb'),'application/octet-stream'))
+        ]
+
+        headers = {}
+
+        response = requests.request("POST", url, headers=headers, data=payload, files=files)
+        print(response.text)
+        #write response['id'] to json file here:
+        responseid = response['id']
+
+        self.idlist.append(fname: responseid) #append to json array
+
+
+
+    def get_json_image(self, json_id, targetspp, targetpath):
+        contents = urllib.request.urlopen("http://chunkycloud.lemaik.de/jobs/" + json_id).read()
+        currentspp = contents['spp']
+        if currentspp >= targetspp:
+            #download the finished picture
+            img = urllib.request.urlopen("https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?").read()
+
+            imgURL = "https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?"
+            urllib.request.urlretrieve(imgURL, targetpath)
+        elif:
+            print(currentspp)
+
+
     #%%    
     def save_json(self, SPP = 0, RD = 0, res_w = 0, res_h = 0):
         for i in range(len(self.new_camX)):
             temp_scene = self.source_scenes[0]
-        
+            #camera
             temp_scene['camera']['position']['x'] = self.new_camX[i]
             temp_scene['camera']['position']['y'] = self.new_camY[i]
             temp_scene['camera']['position']['z'] = self.new_camZ[i]
             temp_scene['camera']['orientation']['roll'] = self.new_camRoll[i]
             temp_scene['camera']['orientation']['pitch'] = self.new_camPitch[i]
             temp_scene['camera']['orientation']['yaw'] = self.new_camYaw[i]
-            
             temp_scene['camera']['fov'] = self.new_camFoV[i]
             temp_scene['camera']['dof'] = self.new_camDoF[i]
             temp_scene['camera']['focalOffset'] = self.new_camfocalOffset[i]
+
+            #clouds
+            temp_scene['sky']['cloudOffset']['x'] = self.new_camX[i]
+            temp_scene['sky']['cloudOffset']['y'] = self.new_camX[i]
+            temp_scene['sky']['cloudOffset']['z'] = self.new_camX[i]
+
+            #misc
+            temp_scene['animationTime'] = self.new_animation[i]
+            temp_scene['sun']['azimuth'] = self.new_lightsun[i]
+
             
             if SPP != 0:
                 temp_scene['spp'] = SPP
@@ -283,14 +382,22 @@ class json_interpT():
                 temp_scene['width'] = res_w
                 temp_scene['heigh'] = res_h
             
-            name = 'interp_' + str(i).zfill( len(str(int(self.nframe))) ) # insure padding in file explorer
+            name = 'interpolation-' + str(i).zfill( len(str(int(self.nframe))) ) # insure padding in file explorer
             temp_scene['name'] = name
+            octree = 'interpolation-000'
+            emittergrid = 'interpolation-000'
+            samples = 100
             
             fname = name + '.json'
-            self.jsonsave(temp_scene, fname)       
-        
+            self.jsonsave(temp_scene, fname)
+
+
+
+
+
 #%%
-#if __name__ == '__main__':
-#    print("interpT - tldr blame jackjt8")
-#    print("debug code still present...")
-#    main()
+if __name__ == '__main__':
+    print("interpT - tldr blame jackjt8")
+    print("debug code still present...")
+    main()
+
