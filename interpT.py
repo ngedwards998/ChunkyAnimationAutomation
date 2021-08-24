@@ -307,14 +307,13 @@ class json_interpT():
             octree = ('interpolation-000.octree2')
             emittergrid = ('interpolation-000.emittergrid')
             self.submit_json(fname, octree, emittergrid, sample, path)
-            print(str(len(self.idlist)))
+            print('frame number: ' + str(len(self.idlist)))
         list_to_json = json.dumps(self.idlist)
         temp = list_to_json
         #while not temp: # aka if temp is not empty
-        time.sleep(900)
+        time.sleep(60)
         for i in temp:
-            #self.get_json_image(, sample, str(path + fname + '.png'))
-            print(i)
+            self.get_json_image(temp[i], sample, str(path + fname + '.png'))
         #self.get_json_image(idlist[fname], samples, str(path + fname + '.png'))
         print(list_to_json)
 
@@ -337,7 +336,7 @@ class json_interpT():
         print(response.text)
         #write response['id'] to json file here:
         responseid = response.json()['_id']
-        self.idlist.append(fname + ':' + responseid) #append to json array
+        self.idlist.append('{' + fname + '\": \"' + responseid + '}') #append to json array
 
     def download_img(url, file_name):
         r = requests.get(url)
@@ -359,6 +358,11 @@ class json_interpT():
                 print(currentspp)
         except:
             print('error in get_json_image function')
+
+    def kill_all_jobs(self, json_list):
+        print('kill')
+
+
 
 
     #%%    
