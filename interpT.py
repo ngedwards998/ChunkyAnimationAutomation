@@ -91,6 +91,7 @@ def main():
 #%%  
 class json_interpT():
     def __init__(self, framerate, decimals):
+        self.idlist = []
         self.decimals = decimals
         self.camX = []
         self.camY = []
@@ -300,25 +301,30 @@ class json_interpT():
         self.new_camDoF = [self.new_camDoF[i] for i in trim_idx]
         self.new_camfocalOffset = [self.new_camfocalOffset[i] for i in trim_idx]
 
-    def chunkycloudhandler(self):
-        #somehow write the idlist to a json file
-        for i in range(len(self.nframe)):
-            self.submit_json(fname, octree, emittergrid, samples)
-            
-        self.get_json_image(idlist[fname], samples, '/snapshot/' + fname + '.png')
+    def chunkycloudhandler(self, sample, path):
+        for i in range(len(self.new_camX)):
+            padding = str(i.zfill( len(str(int(self.nframe)))))
+            fname = 'interpolation-' + padding + '.json'
+            octree = ('interpolation-000.octree2')
+            emittergrid = ('interpolation-000.emittergrid')
+            submit_json(fname, octree, emittergrid)
         list_to_json = json.dumps(idlist)
-
+        temp = list_to_json
+        while not temp: # aka if temp is not empty
+            for i in temp:
+                get_json_image(i[1], samples, str(path + fname + '.png'))
+        #self.get_json_image(idlist[fname], samples, str(path + fname + '.png'))
         print(list_to_json)
 
 
-    def submit_json(self, interpnum, octreenum, emittergridnum, samples1):
+    def submit_json(self, fname, octreenum, emittergridnum, samples1):
         url = "https://api.chunkycloud.lemaik.de/jobs"
-        payload={'X-Api-Key': 'APIKEY1',
+        payload={'X-Api-Key': '',
         'chunkyVersion': '2.x',
         'transient': 'true',
         'targetSpp': samples1}
         files=[
-            ('scene',(interpnum,open('E:/Program Files/.chunky/ChunkyAnimationAutomation/' + interpnum,'rb'),'application/json')),
+            ('scene',(fname,open('E:/Program Files/.chunky/ChunkyAnimationAutomation/' + fname,'rb'),'application/json')),
             ('octree',(octreenum + '.octree2',open('E:/Program Files/.chunky/ChunkyAnimationAutomation/' + octreenum + '.octree2','rb'),'application/octet-stream')),
             ('emittergrid',(emittergridnum + '.emittergrid',open('E:/Program Files/.chunky/ChunkyAnimationAutomation/' + emittergridnum + '.emittergrid','rb'),'application/octet-stream'))
         ]
@@ -328,22 +334,26 @@ class json_interpT():
         response = requests.request("POST", url, headers=headers, data=payload, files=files)
         print(response.text)
         #write response['id'] to json file here:
-        responseid = response['id']
+        responseid = response['_id']
 
-        self.idlist.append(fname: responseid) #append to json array
+        self.idlist.append(fname + ':' + responseid) #append to json array
 
-
+    def download_img(url, file_name):
+        r = requests.get(url)
+        with open(file_name + '.png','wb') as f:
+            f.write(r.content)
 
     def get_json_image(self, json_id, targetspp, targetpath):
         contents = urllib.request.urlopen("http://chunkycloud.lemaik.de/jobs/" + json_id).read()
-        currentspp = contents['spp']
+        currentspp = contents.json()['spp']
         if currentspp >= targetspp:
             #download the finished picture
-            img = urllib.request.urlopen("https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?").read()
+            download_img(str("https://api.chunkycloud.lemaik.de/jobs/" + json_id + "latest.png?".read()), targetpath)
+            #img = urllib.request.urlopen("https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?").read()
 
-            imgURL = "https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?"
-            urllib.request.urlretrieve(imgURL, targetpath)
-        elif:
+            #imgURL = "https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?"
+            #urllib.request.urlretrieve(imgURL, targetpath)
+        else:
             print(currentspp)
 
 
@@ -383,14 +393,14 @@ class json_interpT():
                 temp_scene['heigh'] = res_h
             
             name = 'interpolation-' + str(i).zfill( len(str(int(self.nframe))) ) # insure padding in file explorer
-            temp_scene['name'] = name
-            octree = 'interpolation-000'
-            emittergrid = 'interpolation-000'
-            samples = 100
-            
+            temp_scene['name'] = name            
             fname = name + '.json'
             self.jsonsave(temp_scene, fname)
 
+            
+        samples = 20
+        path = "E:/Program Files/.chunky/ChunkyAnimationAutomation/"
+        self.chunkycloudhandler(samples, path)
 
 
 
