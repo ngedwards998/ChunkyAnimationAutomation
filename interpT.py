@@ -17,22 +17,21 @@ import sys
 import numpy as np
 from scipy import interpolate
 import matplotlib.pyplot as plt
-import requests
-import urllib.request
+import requests, shutil, time
 
 
 #%%
 def main():
     decimals = 15 # for rounding
     
-    framerate = 60
+    framerate = 10
     
     idlist = []
 
     keyscenes = []
 #              [scene_fname, time_stamp]
     keyscenes.append(['interp_1.json', 0.0]) # all time stamps pre 0.0 ignored post interp/convolution
-    keyscenes.append(['interp_2.json', 20.0]) # used as template for saving
+    keyscenes.append(['interp_2.json', 3.0]) # used as template for saving
     
     json_interp = json_interpT(framerate, decimals)
     setup_return = json_interp.keyscene_setup(keyscenes)
@@ -103,7 +102,7 @@ class json_interpT():
         self.camPitch = []
         self.camYaw = []
         self.lightsun = []
-        self.animation = []
+        #self.animation = []
 
         self.camFoV = []
         self.camDoF = []
@@ -184,7 +183,7 @@ class json_interpT():
         self.source_scenes[1]['sky']['cloudOffset']['z'] = z3 # ASK
         
         self.source_scenes[1]['sun']['azimuth'] = lightsun2
-        self.source_scenes[1]['animationTime'] = animation2
+        #self.source_scenes[1]['animationTime'] = animation2
         self.source_scenes[1]['camera']['fov'] = fov2 # ASK
         self.source_scenes[1]['camera']['dof'] = dof2 # ASK
         self.source_scenes[1]['camera']['focalOffset'] = focal2 # ASK
@@ -200,7 +199,7 @@ class json_interpT():
             self.camPitch.append(scene['camera']['orientation']['pitch'])
             self.camYaw.append(scene['camera']['orientation']['yaw'])
             self.lightsun.append(scene['sun']['azimuth'])
-            self.animation.append(scene['animationTime'])
+            #self.animation.append(scene['animationTime'])
             self.cloudX.append(scene['sky']['cloudOffset']['x'])
             self.cloudY.append(scene['sky']['cloudOffset']['y'])
             self.cloudZ.append(scene['sky']['cloudOffset']['z'])
@@ -222,7 +221,7 @@ class json_interpT():
         self.new_camPitch = self.interpT(self.source_times, self.tframe, self.camPitch, interp_mode)
         self.new_camYaw = self.interpT(self.source_times, self.tframe, self.camYaw, interp_mode)
         self.new_lightsun = self.interpT(self.source_times, self.tframe, self.lightsun, interp_mode)
-        self.new_animation = self.interpT(self.source_times, self.tframe, self.animation, interp_mode)
+        #self.new_animation = self.interpT(self.source_times, self.tframe, self.animation, interp_mode)
         self.new_cloudX = self.interpT(self.source_times, self.tframe, self.cloudX, interp_mode)
         self.new_cloudY = self.interpT(self.source_times, self.tframe, self.cloudY, interp_mode)
         self.new_cloudZ = self.interpT(self.source_times, self.tframe, self.cloudZ, interp_mode)
@@ -249,7 +248,7 @@ class json_interpT():
         self.new_camPitch = self.smooth(self.new_camPitch,smoothing_var)
         self.new_camYaw = self.smooth(self.new_camYaw,smoothing_var)
         self.new_lightsun = self.smooth(self.new_lightsun,smoothing_var)
-        self.new_animation = self.smooth(self.new_animation,smoothing_var)
+        #self.new_animation = self.smooth(self.new_animation,smoothing_var)
         self.new_cloudX = self.smooth(self.new_cloudX,smoothing_var)
         self.new_cloudY = self.smooth(self.new_cloudY,smoothing_var)
         self.new_cloudZ = self.smooth(self.new_cloudZ,smoothing_var)
@@ -268,7 +267,7 @@ class json_interpT():
         self.new_camPitch = np.round(self.new_camPitch,decimals)
         self.new_camYaw = np.round(self.new_camYaw,decimals)
         self.new_lightsun = np.round(self.new_lightsun,decimals)
-        self.new_animation = np.round(self.new_animation,decimals)
+        #self.new_animation = np.round(self.new_animation,decimals)
         self.new_cloudX = np.round(self.new_cloudX,decimals)
         self.new_cloudY = np.round(self.new_cloudY,decimals)
         self.new_cloudZ = np.round(self.new_cloudZ,decimals)
@@ -296,37 +295,40 @@ class json_interpT():
 
         #misc
         self.new_lightsun = [self.new_lightsun[i] for i in trim_idx]
-        self.new_animation = [self.new_animation[i] for i in trim_idx]        
+        #self.new_animation = [self.new_animation[i] for i in trim_idx]        
         self.new_camFoV = [self.new_camFoV[i] for i in trim_idx]
         self.new_camDoF = [self.new_camDoF[i] for i in trim_idx]
         self.new_camfocalOffset = [self.new_camfocalOffset[i] for i in trim_idx]
 
     def chunkycloudhandler(self, sample, path):
         for i in range(len(self.new_camX)):
-            padding = str(i.zfill( len(str(int(self.nframe)))))
+            padding = str(i).zfill( len(str(int(self.nframe))))
             fname = 'interpolation-' + padding + '.json'
             octree = ('interpolation-000.octree2')
             emittergrid = ('interpolation-000.emittergrid')
-            submit_json(fname, octree, emittergrid)
-        list_to_json = json.dumps(idlist)
+            self.submit_json(fname, octree, emittergrid, sample, path)
+            print(str(len(self.idlist)))
+        list_to_json = json.dumps(self.idlist)
         temp = list_to_json
-        while not temp: # aka if temp is not empty
-            for i in temp:
-                get_json_image(i[1], samples, str(path + fname + '.png'))
+        #while not temp: # aka if temp is not empty
+        time.sleep(900)
+        for i in temp:
+            #self.get_json_image(, sample, str(path + fname + '.png'))
+            print(i)
         #self.get_json_image(idlist[fname], samples, str(path + fname + '.png'))
         print(list_to_json)
 
 
-    def submit_json(self, fname, octreenum, emittergridnum, samples1):
+    def submit_json(self, fname, octreenum, emittergridnum, samples1, path):
         url = "https://api.chunkycloud.lemaik.de/jobs"
         payload={'X-Api-Key': '',
         'chunkyVersion': '2.x',
         'transient': 'true',
         'targetSpp': samples1}
         files=[
-            ('scene',(fname,open('E:/Program Files/.chunky/ChunkyAnimationAutomation/' + fname,'rb'),'application/json')),
-            ('octree',(octreenum + '.octree2',open('E:/Program Files/.chunky/ChunkyAnimationAutomation/' + octreenum + '.octree2','rb'),'application/octet-stream')),
-            ('emittergrid',(emittergridnum + '.emittergrid',open('E:/Program Files/.chunky/ChunkyAnimationAutomation/' + emittergridnum + '.emittergrid','rb'),'application/octet-stream'))
+            ('scene',(fname,open(path + fname,'rb'),'application/json')),
+            ('octree',(octreenum + '.octree2',open(path + octreenum,'rb'),'application/octet-stream')),
+            ('emittergrid',(emittergridnum + '.emittergrid',open(path + emittergridnum,'rb'),'application/octet-stream'))
         ]
 
         headers = {}
@@ -334,8 +336,7 @@ class json_interpT():
         response = requests.request("POST", url, headers=headers, data=payload, files=files)
         print(response.text)
         #write response['id'] to json file here:
-        responseid = response['_id']
-
+        responseid = response.json()['_id']
         self.idlist.append(fname + ':' + responseid) #append to json array
 
     def download_img(url, file_name):
@@ -344,17 +345,20 @@ class json_interpT():
             f.write(r.content)
 
     def get_json_image(self, json_id, targetspp, targetpath):
-        contents = urllib.request.urlopen("http://chunkycloud.lemaik.de/jobs/" + json_id).read()
-        currentspp = contents.json()['spp']
-        if currentspp >= targetspp:
-            #download the finished picture
-            download_img(str("https://api.chunkycloud.lemaik.de/jobs/" + json_id + "latest.png?".read()), targetpath)
-            #img = urllib.request.urlopen("https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?").read()
+        try:
+            contents = urllib.request.urlopen("http://chunkycloud.lemaik.de/jobs/" + json_id).read()
+            currentspp = contents.json()['spp']
+            if currentspp >= targetspp:
+                #download the finished picture
+                download_img(str("https://api.chunkycloud.lemaik.de/jobs/" + json_id + "latest.png?".read()), targetpath)
+                #img = urllib.request.urlopen("https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?").read()
 
-            #imgURL = "https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?"
-            #urllib.request.urlretrieve(imgURL, targetpath)
-        else:
-            print(currentspp)
+                #imgURL = "https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?"
+                #urllib.request.urlretrieve(imgURL, targetpath)
+            else:
+                print(currentspp)
+        except:
+            print('error in get_json_image function')
 
 
     #%%    
@@ -378,7 +382,7 @@ class json_interpT():
             temp_scene['sky']['cloudOffset']['z'] = self.new_camX[i]
 
             #misc
-            temp_scene['animationTime'] = self.new_animation[i]
+            #temp_scene['animationTime'] = self.new_animation[i]
             temp_scene['sun']['azimuth'] = self.new_lightsun[i]
 
             
@@ -397,9 +401,9 @@ class json_interpT():
             fname = name + '.json'
             self.jsonsave(temp_scene, fname)
 
-            
+
         samples = 20
-        path = "E:/Program Files/.chunky/ChunkyAnimationAutomation/"
+        path = ""
         self.chunkycloudhandler(samples, path)
 
 
