@@ -19,19 +19,21 @@ from scipy import interpolate
 import matplotlib.pyplot as plt
 import requests, shutil, time
 
+sys.path.append('.')
+from chunkycloud import *
 
 #%%
 def main():
     decimals = 15 # for rounding
     
-    framerate = 10
+    framerate = 23
     
     idlist = []
 
     keyscenes = []
 #              [scene_fname, time_stamp]
     keyscenes.append(['interp_1.json', 0.0]) # all time stamps pre 0.0 ignored post interp/convolution
-    keyscenes.append(['interp_2.json', 3.0]) # used as template for saving
+    keyscenes.append(['interp_2.json', 10.0]) # used as template for saving
     
     json_interp = json_interpT(framerate, decimals)
     setup_return = json_interp.keyscene_setup(keyscenes)
@@ -339,163 +341,15 @@ class json_interpT():
             fname = name + '.json'
             self.jsonsave(temp_scene, fname)
 
-
-
-            
-class ChunkyCloud():
-    def __init__(self, api_key: str):
-        self._api_key = api_key
-        self._id_queue: Dict[str, str] = {} # This stores the ids and their corresponding output filepaths
-  
-    def submit(self, octree: str, emitter_grid: str, scene_file: str, samples: int, output_path: str) -> str:
-        """
-        This will submit a job to CC and return the ID number.
-        :param octree:       Path to the octree file
-        :param emitter_grid: Path to the emitter grid file
-        :param scene_file:   Path to the scene file
-        """
-        response = requests.request("POST", "https://api.chunkycloud.lemaik.de/jobs", headers={},
-                                    data={'X-Api-Key': self._api_key, 'chunkyVersion': '2.x', 'transient': True, 'targetSpp': samples},
-                                    files=[
-                                      ('scene', (os.path.basename(scene_file), open(scene_file, 'rb')), 'application/json'),
-                                      ('octre', (os.path.basename(octree), open(octree, 'rb')), 'application/octet-stream'),
-                                      ('emittergrid', (os.path.basename(emitter_grid), open(emitter_grid, 'rb')), 'application/octet-stream')
-                                    ])
-        new_id = response.json()['_id']
-        self._id_queue[new_id] = output_path
-        return new_id
-
-    # Cancels job with provided jobid variable and api-key
-    def cancel(self, jobid, api_key):
-        url = ("https://api.chunkycloud.lemaik.de/jobs/" + str(jobid))
-        
-        payload={'X-Api-Key': str(api_key),
-        'cancel': 'true'}
-        files=[
-
-        ]
-
-        headers = {}
-        response = requests.request("PUT", url, headers=headers, data=payload, files=files)
-        print(response.text)
-
-    # Cancel all jobs function, !!!WARNING USE WITH EXTREME CAUTION DELETES ALL JOBS!!!
-    def cancel_all(self, idqueue):
-        while len(idqueue) > 0:
-            for id_name, output_path in list(idqueue.items()):
-                del idqueue[id_name]
-                url =("https://api.chunkycloud.lemaik.de/jobs/" + output_path)
-                payload={'X-Api-Key': str(api_key),
-                'cancel': 'true'}
-                files=[
-
-                ]
-
-                headers = {}
-                response = requests.request("PUT", url, headers=headers, data=payload, files=files)
-                print(response.text)
-  
-    def is_complete(self, id_number: str) -> bool:
-        """ Check if a job with an id is complete """
-        response = requests.request("GET", "https://api.chunkycloud.lemaik.de/jobs/" + id_number)
-        contents = response.json()
-        return contents['spp'] >= contents['targetSpp']
-
-    def download_img(self, id_number: str, output_file: str):
-        # Download the result of the job with id to an output file
-        # Download logic
-        url =("https://api.chunkycloud.lemaik.de/jobs/" + id_number + '/latest.png?')
-        r = requests.get(url)
-        with open(id_number + '.png','wb') as f:
-            f.write(r.content)
-  
-    def wait_and_download_all(self):
-        while len(self._id_queue) > 0:
-            time.sleep(60) # insert some reasonable poll time here
-            for id_name, output_path in list(self._id_queue.items()):
-                if self.is_complete(id_name):
-                    del self._id_queue[id_name] # Remove this item from the queue 
-                    self.download_img(id_name, output_path)
-                    
-    # open the api-key document (for security reasons :))
-    try:
-        a = open('api_key.txt','r')
-        self.__init__(a)
+        api_key = open('api_key.txt','r')
+        cc = ChunkyCloud(api_key)
         for i in range(len(self.new_camX)):
-            self.submit("interpolation-000.octree", "interpolation-000.emittergrid", i, 20, "")
-        self.wait_and_download_all()
-    except:
-        print('chunkyhandler class loop error, cancelling all jobs in queue')
-        self.cancel_all(self._id_queue)
+            cc.submit_json(api_key, "interpolation-000.octree2", "interpolation-000.emittergrid", 'interpolation-' + str(i).zfill( len(str(int(self.nframe)))) + '.json', 20, "E:/Program Files/.chunky/scenes/")
+        cc.wait_and_download_all()
 
-
-"""
-    def chunkycloudhandler(self, sample, path):
-        for i in range(len(self.new_camX)):
-            padding = str(i).zfill( len(str(int(self.nframe))))
-            fname = 'interpolation-' + padding + '.json'
-            octree = ('interpolation-000.octree2')
-            emittergrid = ('interpolation-000.emittergrid')
-            self.submit_json(fname, octree, emittergrid, sample, path)
-            print('frame number: ' + str(len(self.idlist)))
-        list_to_json = json.dumps(self.idlist)
-        temp = list_to_json
-        #while not temp: # aka if temp is not empty
-        time.sleep(60)
-        for i in temp:
-            self.get_json_image(temp[i], sample, str(path + fname + '.png'))
-        #self.get_json_image(idlist[fname], samples, str(path + fname + '.png'))
-        print(list_to_json)
-
-
-    def submit_json(self, fname, octreenum, emittergridnum, samples1, path):
-        url = "https://api.chunkycloud.lemaik.de/jobs"
-        payload={'X-Api-Key': '',
-        'chunkyVersion': '2.x',
-        'transient': 'true',
-        'targetSpp': samples1}
-        files=[
-            ('scene',(fname,open(path + fname,'rb'),'application/json')),
-            ('octree',(octreenum + '.octree2',open(path + octreenum,'rb'),'application/octet-stream')),
-            ('emittergrid',(emittergridnum + '.emittergrid',open(path + emittergridnum,'rb'),'application/octet-stream'))
-        ]
-
-        headers = {}
-
-        response = requests.request("POST", url, headers=headers, data=payload, files=files)
-        print(response.text)
-        #write response['id'] to json file here:
-        responseid = response.json()['_id']
-        self.idlist.append('{' + fname + '\": \"' + responseid + '}') #append to json array
-
-    def download_img(url, file_name):
-        r = requests.get(url)
-        with open(file_name + '.png','wb') as f:
-            f.write(r.content)
-
-    def get_json_image(self, json_id, targetspp, targetpath):
-        try:
-            contents = urllib.request.urlopen("http://chunkycloud.lemaik.de/jobs/" + json_id).read()
-            currentspp = contents.json()['spp']
-            if currentspp >= targetspp:
-                #download the finished picture
-                download_img(str("https://api.chunkycloud.lemaik.de/jobs/" + json_id + "latest.png?".read()), targetpath)
-                #img = urllib.request.urlopen("https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?").read()
-
-                #imgURL = "https://api.chunkycloud.lemaik.de/jobs/" + json_id + "/latest.png?"
-                #urllib.request.urlretrieve(imgURL, targetpath)
-            else:
-                print(currentspp)
-        except:
-            print('error in get_json_image function')
-
-    def kill_all_jobs(self, json_list):
-        print('kill')
-"""
 
 #%%
 if __name__ == '__main__':
     print("interpT - tldr blame jackjt8")
     print("debug code still present...")
     main()
-
