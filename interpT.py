@@ -87,10 +87,10 @@ def main():
     json_interp.save_json()
 
     
-#%%  
+#%%
 class json_interpT():
     def __init__(self, framerate, decimals):
-        self.idlist = []
+        #self.idlist = []
         self.decimals = decimals
         self.camX = []
         self.camY = []
@@ -300,6 +300,136 @@ class json_interpT():
         self.new_camDoF = [self.new_camDoF[i] for i in trim_idx]
         self.new_camfocalOffset = [self.new_camfocalOffset[i] for i in trim_idx]
 
+    def save_json(self, SPP = 0, RD = 0, res_w = 0, res_h = 0):
+        for i in range(len(self.new_camX)):
+            temp_scene = self.source_scenes[0]
+            #camera
+            temp_scene['camera']['position']['x'] = self.new_camX[i]
+            temp_scene['camera']['position']['y'] = self.new_camY[i]
+            temp_scene['camera']['position']['z'] = self.new_camZ[i]
+            temp_scene['camera']['orientation']['roll'] = self.new_camRoll[i]
+            temp_scene['camera']['orientation']['pitch'] = self.new_camPitch[i]
+            temp_scene['camera']['orientation']['yaw'] = self.new_camYaw[i]
+            temp_scene['camera']['fov'] = self.new_camFoV[i]
+            temp_scene['camera']['dof'] = self.new_camDoF[i]
+            temp_scene['camera']['focalOffset'] = self.new_camfocalOffset[i]
+
+            #clouds
+            temp_scene['sky']['cloudOffset']['x'] = self.new_camX[i]
+            temp_scene['sky']['cloudOffset']['y'] = self.new_camX[i]
+            temp_scene['sky']['cloudOffset']['z'] = self.new_camX[i]
+
+            #misc
+            #temp_scene['animationTime'] = self.new_animation[i]
+            temp_scene['sun']['azimuth'] = self.new_lightsun[i]
+
+            
+            if SPP != 0:
+                temp_scene['spp'] = SPP
+                
+            if RD != 0:
+                temp_scene['rayDepth'] = RD
+                
+            if res_w != 0 and res_h != 0:
+                temp_scene['width'] = res_w
+                temp_scene['height'] = res_h
+            
+            name = 'interpolation-' + str(i).zfill( len(str(int(self.nframe))) ) # insure padding in file explorer
+            temp_scene['name'] = name            
+            fname = name + '.json'
+            self.jsonsave(temp_scene, fname)
+
+
+
+            
+class ChunkyCloud():
+    def __init__(self, api_key: str):
+        self._api_key = api_key
+        self._id_queue: Dict[str, str] = {} # This stores the ids and their corresponding output filepaths
+  
+    def submit(self, octree: str, emitter_grid: str, scene_file: str, samples: int, output_path: str) -> str:
+        """
+        This will submit a job to CC and return the ID number.
+        :param octree:       Path to the octree file
+        :param emitter_grid: Path to the emitter grid file
+        :param scene_file:   Path to the scene file
+        """
+        response = requests.request("POST", "https://api.chunkycloud.lemaik.de/jobs", headers={},
+                                    data={'X-Api-Key': self._api_key, 'chunkyVersion': '2.x', 'transient': True, 'targetSpp': samples},
+                                    files=[
+                                      ('scene', (os.path.basename(scene_file), open(scene_file, 'rb')), 'application/json'),
+                                      ('octre', (os.path.basename(octree), open(octree, 'rb')), 'application/octet-stream'),
+                                      ('emittergrid', (os.path.basename(emitter_grid), open(emitter_grid, 'rb')), 'application/octet-stream')
+                                    ])
+        new_id = response.json()['_id']
+        self._id_queue[new_id] = output_path
+        return new_id
+
+    # Cancels job with provided jobid variable and api-key
+    def cancel(self, jobid, api_key):
+        url = ("https://api.chunkycloud.lemaik.de/jobs/" + str(jobid))
+        
+        payload={'X-Api-Key': str(api_key),
+        'cancel': 'true'}
+        files=[
+
+        ]
+
+        headers = {}
+        response = requests.request("PUT", url, headers=headers, data=payload, files=files)
+        print(response.text)
+
+    # Cancel all jobs function, !!!WARNING USE WITH EXTREME CAUTION DELETES ALL JOBS!!!
+    def cancel_all(self, idqueue):
+        while len(idqueue) > 0:
+            for id_name, output_path in list(idqueue.items()):
+                del idqueue[id_name]
+                url =("https://api.chunkycloud.lemaik.de/jobs/" + output_path)
+                payload={'X-Api-Key': str(api_key),
+                'cancel': 'true'}
+                files=[
+
+                ]
+
+                headers = {}
+                response = requests.request("PUT", url, headers=headers, data=payload, files=files)
+                print(response.text)
+  
+    def is_complete(self, id_number: str) -> bool:
+        """ Check if a job with an id is complete """
+        response = requests.request("GET", "https://api.chunkycloud.lemaik.de/jobs/" + id_number)
+        contents = response.json()
+        return contents['spp'] >= contents['targetSpp']
+
+    def download_img(self, id_number: str, output_file: str):
+        # Download the result of the job with id to an output file
+        # Download logic
+        url =("https://api.chunkycloud.lemaik.de/jobs/" + id_number + '/latest.png?')
+        r = requests.get(url)
+        with open(id_number + '.png','wb') as f:
+            f.write(r.content)
+  
+    def wait_and_download_all(self):
+        while len(self._id_queue) > 0:
+            time.sleep(60) # insert some reasonable poll time here
+            for id_name, output_path in list(self._id_queue.items()):
+                if self.is_complete(id_name):
+                    del self._id_queue[id_name] # Remove this item from the queue 
+                    self.download_img(id_name, output_path)
+                    
+    # open the api-key document (for security reasons :))
+    try:
+        a = open('api_key.txt','r')
+        self.__init__(a)
+        for i in range(len(self.new_camX)):
+            self.submit("interpolation-000.octree", "interpolation-000.emittergrid", i, 20, "")
+        self.wait_and_download_all()
+    except:
+        print('chunkyhandler class loop error, cancelling all jobs in queue')
+        self.cancel_all(self._id_queue)
+
+
+"""
     def chunkycloudhandler(self, sample, path):
         for i in range(len(self.new_camX)):
             padding = str(i).zfill( len(str(int(self.nframe))))
@@ -361,57 +491,7 @@ class json_interpT():
 
     def kill_all_jobs(self, json_list):
         print('kill')
-
-
-
-
-    #%%    
-    def save_json(self, SPP = 0, RD = 0, res_w = 0, res_h = 0):
-        for i in range(len(self.new_camX)):
-            temp_scene = self.source_scenes[0]
-            #camera
-            temp_scene['camera']['position']['x'] = self.new_camX[i]
-            temp_scene['camera']['position']['y'] = self.new_camY[i]
-            temp_scene['camera']['position']['z'] = self.new_camZ[i]
-            temp_scene['camera']['orientation']['roll'] = self.new_camRoll[i]
-            temp_scene['camera']['orientation']['pitch'] = self.new_camPitch[i]
-            temp_scene['camera']['orientation']['yaw'] = self.new_camYaw[i]
-            temp_scene['camera']['fov'] = self.new_camFoV[i]
-            temp_scene['camera']['dof'] = self.new_camDoF[i]
-            temp_scene['camera']['focalOffset'] = self.new_camfocalOffset[i]
-
-            #clouds
-            temp_scene['sky']['cloudOffset']['x'] = self.new_camX[i]
-            temp_scene['sky']['cloudOffset']['y'] = self.new_camX[i]
-            temp_scene['sky']['cloudOffset']['z'] = self.new_camX[i]
-
-            #misc
-            #temp_scene['animationTime'] = self.new_animation[i]
-            temp_scene['sun']['azimuth'] = self.new_lightsun[i]
-
-            
-            if SPP != 0:
-                temp_scene['spp'] = SPP
-                
-            if RD != 0:
-                temp_scene['rayDepth'] = RD
-                
-            if res_w != 0 and res_h != 0:
-                temp_scene['width'] = res_w
-                temp_scene['heigh'] = res_h
-            
-            name = 'interpolation-' + str(i).zfill( len(str(int(self.nframe))) ) # insure padding in file explorer
-            temp_scene['name'] = name            
-            fname = name + '.json'
-            self.jsonsave(temp_scene, fname)
-
-
-        samples = 20
-        path = ""
-        self.chunkycloudhandler(samples, path)
-
-
-
+"""
 
 #%%
 if __name__ == '__main__':
