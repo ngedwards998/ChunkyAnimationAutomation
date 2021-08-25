@@ -73,15 +73,16 @@ class ChunkyCloud:
         # Download the result of the job with id to an output file
         # Download logic
         print('downloading new image: ' + id_number)
+        print(output_file)
         r = requests.get('https://api.chunkycloud.lemaik.de/jobs/' + id_number + '/latest.png?')
-        with open('snapshots/' + id_number + '.png','wb') as f:
+        with open('snapshots/' + output_file + '.png','wb') as f:
             f.write(r.content)
     
     def wait_and_download_all(self):
         while len(self._id_queue) > 0:
-            #time.sleep(1) # insert some reasonable poll time here
+            time.sleep(300) # insert some reasonable poll time here
             for id_name, output_path in list(self._id_queue.items()):
                 if self.is_complete(id_name): 
                     self.download_img(id_name, output_path)
-                    time.sleep(1)
+                    #time.sleep(1)
                     del self._id_queue[id_name] # Remove this item from the queue
