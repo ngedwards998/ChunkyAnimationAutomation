@@ -26,14 +26,14 @@ from chunkycloud import *
 def main():
     decimals = 15 # for rounding
     
-    framerate = 23
+    framerate = 4
     
     idlist = []
 
     keyscenes = []
 #              [scene_fname, time_stamp]
     keyscenes.append(['interp_1.json', 0.0]) # all time stamps pre 0.0 ignored post interp/convolution
-    keyscenes.append(['interp_2.json', 5.0]) # used as template for saving
+    keyscenes.append(['interp_2.json', 1.0]) # used as template for saving
     
     json_interp = json_interpT(framerate, decimals)
     setup_return = json_interp.keyscene_setup(keyscenes)
