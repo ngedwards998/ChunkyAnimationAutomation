@@ -79,7 +79,7 @@ class ChunkyCloud:
     
     def wait_and_download_all(self):
         while len(self._id_queue) > 0:
-            time.sleep(300) # insert some reasonable poll time here
+            time.sleep(10) # insert some reasonable poll time here
             for id_name, output_path in list(self._id_queue.items()):
                 if self.is_complete(id_name):
                     print("downloading: " + id_name)

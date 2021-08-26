@@ -26,14 +26,15 @@ from chunkycloud import *
 def main():
     decimals = 15 # for rounding
     
-    framerate = 4
+    framerate = 240
     
     idlist = []
 
     keyscenes = []
 #              [scene_fname, time_stamp]
     keyscenes.append(['interp_1.json', 0.0]) # all time stamps pre 0.0 ignored post interp/convolution
-    keyscenes.append(['interp_2.json', 1.0]) # used as template for saving
+    keyscenes.append(['interp_2.json', 5.0]) # used as template for saving
+    keyscenes.append(['interp_3.json', 10.0])
     
     json_interp = json_interpT(framerate, decimals)
     setup_return = json_interp.keyscene_setup(keyscenes)
@@ -338,16 +339,20 @@ class json_interpT():
             
             name = 'interpolation-' + str(i).zfill( len(str(int(self.nframe))) ) # insure padding in file explorer
             temp_scene['name'] = name            
-            fname = name + '.json'
+            fname = 'animation_jsons/' + name + '.json'
             self.jsonsave(temp_scene, fname)
 
         api_key = open('api_key.txt','r')
         cc = ChunkyCloud(api_key)
-        for i in range(len(self.new_camX)):
-            cc.submit_json(api_key, "interpolation-000.octree2", "interpolation-000.emittergrid", 'interpolation-' + str(i).zfill( len(str(int(self.nframe)))) + '.json', 100, "chunkycloudrender-" + str(i).zfill( len(str(int(self.nframe)))))
-        cc.wait_and_download_all()
-
-
+        try:
+            for i in range(len(self.new_camX)):
+                cc.submit_json(api_key, "interpolation-000.octree2", "interpolation-000.emittergrid", 'animation_jsons/interpolation-' + str(i).zfill( len(str(int(self.nframe)))) + '.json', 100, "chunkycloudrender-" + str(i).zfill( len(str(int(self.nframe)))))
+            cc.wait_and_download_all()
+        except:
+            print('Error in wait_and_download_all function, canceling all jobs...\n')
+            print(list(self._id_queue.items()))
+            a = list(self._id_queue.items())
+            cc.cancel_all(a[idname])
 #%%
 if __name__ == '__main__':
     print("interpT - tldr blame jackjt8")
